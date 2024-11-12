@@ -1,4 +1,13 @@
 .Rproj.user
 HRS/HRSdata/
 HRS/set_curdir.do
+.DS_Store
+.RData
+.Rhistory
+.HealthWealth.Rproj
+.DS_Store
+HRS/~HRS_main.do.stswp
+HRS/~set_curdir.do.stswp
+PSID/.DS_Store
+
 
