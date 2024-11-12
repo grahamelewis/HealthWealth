@@ -1,0 +1,5 @@
+* set curdir 
+
+global  curdir   "/Users/graham/OneDrive/Research/HealthWealth/HRS"    /* main folder directory */
+global  datadir  "$curdir/HRSdata"
+global  outdir   "$curdir/HRSout"

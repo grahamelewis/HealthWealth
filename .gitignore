@@ -1,2 +1,4 @@
-# ignore ALL files in data directory
-data/
+.Rproj.user
+HRS/HRSdata/
+HRS/set_curdir.do
+
