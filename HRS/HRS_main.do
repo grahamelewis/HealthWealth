@@ -1,5 +1,5 @@
 *** This file prepares data from RAND HRS to estimates statistics ***
-* updated, Novermber 9, 2024
+* updated, Novermber 15, 2024
 *
 * input file:
 * data file: curdir/HRSdata/datadir/randhrs1992_2020v2.dta
@@ -38,17 +38,50 @@ if (`createdata'==1) {
 	
 	use $datadir/randhrs1992_2020v2.dta, clear   /* RAND HRS data */
 	
-	
 	* Keep wanted columns
 	
-	keep hhidpn hacohort r*agey_e r*iwstat r*shlt rabyear raeduc ragender raracem
+	keep hhidpn hacohort h*atotb h*hhres h*child h*cpl r*agey_e r*mstath r*iwstat r*shlt rabyear raeduc ragender raracem
 	
-	foreach mm in "2" "3" "4" "5" "6"  "7"  "8"  "9"  "10"  "11" "12" "13"{
+	*********** CPI_U ****************
+	local cpi1    = 140.3      /* 1992 */
+	local cpi2    = 148.2      /* 1994 */
+	local cpi3    = 156.9      /* 1996 */
+	local cpi4    = 163.0      /* 1998 */
+	local cpi5    = 172.2      /* 2000 */
+	local cpi6    = 179.9      /* 2002 */
+	local cpi7    = 188.9      /* 2004 */
+	local cpi8    = 201.6      /* 2006 */
+	local cpi9    = 215.30     /* 2008 */  
+	local cpi10   = 218.06     /* 2010 */
+	local cpi11   = 229.59     /* 2012 */
+	local cpi12   = 236.73     /* 2014 */
+	local cpi13   = 240.00     /* 2016 */
+	
+	foreach mm in "2" "3" "4" "5" "6"  "7"  "8"  "9"  "10"  "11" "12" "13" {
 		
 		
 		gen age`mm' = r`mm'agey_e
 		
 		gen iwstat`mm' = r`mm'iwstat
+		
+		gen noofresident`mm' = h`mm'hhres
+		replace noofresident`mm' = 9 if noofresident`mm' > 9
+		
+		gen couple`mm' = . 
+		replace couple`mm'  = 1 if h`mm'cpl == 1   /* 1=couple, 0=single */
+		replace couple`mm'  = 0 if h`mm'cpl == 0
+		* Generate variable for married
+		gen marry`mm' = .
+		replace marry`mm'   = 1 if r`mm'mstath == 1 | r`mm'mstath == 2 | r`mm'mstath == 3   /* 1=married/partner, 0=non-married */
+		replace marry`mm'   = 0 if r`mm'mstath == 4 | r`mm'mstath == 5 | r`mm'mstath == 6 | r`mm'mstath == 7 | r`mm'mstath == 8
+		* Generate number of kids
+		gen noofkid`mm' = h`mm'child
+		
+		gen famsize`mm' = 1 + couple`mm' + noofkid`mm'
+		replace famsize`mm' = 6  if famsize`mm' > 6
+		
+		gen netwealthA`mm' = .
+		replace netwealthA`mm' = h`mm'atotb/`cpi`mm''*`cpi`refyear'' 
 		
 		* Generate health: 1 if poor, 0 if good
 		gen health`mm' = .
@@ -56,7 +89,6 @@ if (`createdata'==1) {
 		replace health`mm' = 0 if r`mm'shlt==4  | r`mm'shlt==5
 		
 		gen health2`mm' = r`mm'shlt
-		
 		
 		gen birth_year`mm' = rabyear
 		
@@ -70,9 +102,9 @@ if (`createdata'==1) {
 	
 	}
 	
-	keep hhidpn hacohort age* iwstat* health* health2* birth_year* educ* sex* race*
+	keep hhidpn hacohort noofresident* famsize* marry* age* netwealthA* iwstat* health* health2* birth_year* educ* sex* race*
 	
-	reshape long age iwstat health health2 birth_year educ sex race, i(hhidpn) j(year)
+	reshape long age noofresident famsize marry netwealthA iwstat health health2 birth_year educ sex race, i(hhidpn) j(year)
 	
 	gen wave = year
 	recode year (1=1992) (2=1994) (3=1996) (4=1998) (5=2000) (6=2002) (7=2004) (8=2006) (9=2008) (10=2010) (11=2012)  (12=2014)  (13=2016)
@@ -117,10 +149,47 @@ if (`createdata'==1) {
 	replace ageint2 = 95  if age>=95 & age<=96
 	replace ageint2 = 97  if age>=97 & age<=98
 	
+	* Generate binned ages every 5 years - used for wealth generation
+	* Used for regressing to obtain wealth estimates
+	gen ageint5 = .
+	replace ageint5 = 0 if age<50
+	replace ageint5 = 1 if age>=50 & age<=54
+	replace ageint5 = 2 if age>=55 & age<=59
+	replace ageint5 = 3 if age>=60 & age<=64
+	replace ageint5 = 4 if age>=65 & age<=69
+	replace ageint5 = 5 if age>=70 & age<=74
+	* Include all observations >= 75
+	replace ageint5 = 6 if age>=75 & age<=79
+	replace ageint5 = 7 if age>=80 & age<=85
+	replace ageint5 = 8 if age>=85
+	
+	* Generate binned ages by five years for showing wealth results
+	gen ageint5_1 = .
+	replace ageint5_1 = 0 if age<50
+	replace ageint5_1 = 1 if age>=50 & age<=54
+	replace ageint5_1 = 2 if age>=55 & age<=59
+	replace ageint5_1 = 3 if age>=60 & age<=64
+	replace ageint5_1 = 4 if age>=65 & age<=69
+	replace ageint5_1 = 5 if age>=70 & age<=74
+	replace ageint5_1 = 6 if age>=75
+	
+	gen agebin1 = .
+	replace agebin1 = 1 if age>=55 & age <= 69
+	replace agebin1 = 2 if age>=70 & age<=89
+	
 	* Generate a college variable (1 if college, 0 without)
 	gen college = .
 	replace college = 1 if educ==5
 	replace college = 0 if educ==2 | educ==3 | educ==4
+	
+	
+	fvset base  1998 year       /* year (1998) */
+	fvset base  3    famsize    /* family size(3) */ 
+	fvset base  1    health     /* health(1) */
+	fvset base  0    marry      /* marry(0) */
+	
+	xtset hhidpn year
+	sort  hhidpn year
 	
 	save $datadir/HRS_main.dta, replace
 }
@@ -131,11 +200,11 @@ if (`createdata'==1) {
 
 use $datadir/HRS_main.dta, clear
 
-* Keep only males
-keep if sex==1
+* Keep observations for males and females
+keep if sex==0 //| sex==0
 
-* Keep if college is 0 or 1
-keep if college==0 | college==1 
+* Keep observations for college and non-college
+keep if college==1 //| college==1
 
 * Keep individuals in the age range or who died in survey year
 keep if (age>=51 & age<=99) | alive == 0
@@ -150,24 +219,22 @@ drop if year==1992
 drop if health==. & alive==.
 
 
-*************** Generate Health Percentages ***********
-preserve 
-
-* Drop individuals with no health observation
-drop if health==. & alive==1
-
-save $datadir/HRS_healthshares_input.dta, replace
-
-do $curdir/HRS_healthshare_calc.do 
-
-restore
-
-
-
-
-
-
-
+****************************************
+***** Health Percentage Generation *****
+****************************************
+// preserve 
+//
+// * Drop individuals with no health observation
+// drop if health==. & alive==1
+//
+// save $datadir/HRS_healthshares_input.dta, replace
+//
+// do $curdir/HRS_healthshare_calc.do 
+//
+// restore
+*********************************************
+***** Estimate fixed labor productivity *****
+*********************************************
 
 
 
@@ -176,6 +243,182 @@ restore
 
 
 
+******************************************
+***** Health Transition Calculations *****
+******************************************
+// xtset hhidpn year
+// sort  hhidpn year
+//
+// save $datadir/HRS_healthmovement_input.dta, replace
+//
+// do $curdir/HRS_healthmovement_calc.do
+
+
+*****************************
+***** Estimating Wealth *****
+*****************************
+
+*** Construct wealth variables after controlling for family size and base year ***
+gen noofresidbyage = .
+forvalue aa = 1/8 {
+   quietly: summarize noofresident if ageint5  ==`aa', detail
+   replace noofresidbyage = r(mean) if ageint5 ==`aa'
+}
+
+* Identify the bottom 0.5% and top 0.5% (not used in estimation)
+_pctile netwealthA if year>=1994 & age<=99,  p(0.5 99.5) 
+gen netwealthA_extreme = cond( (netwealthA < r(r1) | netwealthA >r(r2) & netwealthA !=.) & year>=1994 & age<=99, 1, 0)   
+quietly {                                                                                                               
+	* Generate temp variables that will not be altered when we change them
+	gen noofresid_temp = noofresident
+	gen year_temp      = year 
+	* Ensure base year is set to 1998
+	fvset base  1998 year_temp
+   
+	* Regress using formula from paper
+	reg netwealthA  ((( i.age c.noofresid_temp c.noofresid_temp#c.noofresid_temp)##i.health)##i.college)##i.sex   i.year_temp   if year>=1994 & age<=99 & netwealthA_extreme==0
+	predict yhat  if netwealthA!=., xb
+
+	* Replace by the mean number of residents
+	replace noofresid_temp = noofresidbyage
+	replace year_temp = 1998
+	predict yhat1 if e(sample), xb
+	
+	* Create wealth variable
+	gen wealth_fam3 = netwealthA - yhat + yhat1
+	
+	* Drop temporary variables
+	drop noofresid_temp year_temp yhat yhat1
+}
+
+egen pctile25 = pctile(wealth_fam3), p(25) by(ageint5_1 health sex college)
+egen pctile50 = pctile(wealth_fam3), p(50) by(ageint5_1 health sex college)
+egen pctile75 = pctile(wealth_fam3), p(75) by(ageint5_1 health sex college)
+
+collapse (mean) pctile25 (mean) pctile50 (mean) pctile75, by (ageint5_1 health sex college)
+
+drop if health == .
+gen original = 0
+
+* Generate the scatter plot with number of observations for college and gender 
+// twoway (scatter obs_count Age if college == 0 & sex==1, mcolor(stblue) msymbol(circle)) ///
+//        (scatter obs_count Age if college == 1 & sex==1, mcolor(stred) msymbol(triangle)) ///
+//        (scatter obs_count Age if college == 0 & sex==0, mcolor(styellow) msymbol(circle)) ///
+// 	   (scatter obs_count Age if college == 1 & sex==0, mcolor(stgreen) msymbol(triangle)), ///
+//        legend(order(1 "p(25)" 2 "p(50)" 3 "p(75)")) ///
+//        ytitle("# of observations") xtitle("Age")
+
+// save $datadir/HRS_wealth_impute_original.dta, replace
+
+// append using $datadir/HRS_wealth_impute_original.dta
+
+	
+		
+// twoway (scatter pctile25 ageint5_1 if health == 0 & college == 0 & sex==1 & original==1, mcolor(red) msymbol(X) msize(vlarge)) ///
+// 		(scatter pctile50 ageint5_1 if health == 0 & college == 0 & sex==1 & original==1, mcolor(blue) msymbol(Oh) msize(vlarge)) ///
+// 		(scatter pctile75 ageint5_1 if health == 0 & college == 0 & sex==1 & original==1, mcolor(green) msymbol(O) msize(vlarge)), ///
+// 		ylabel(0(100000)800000, format(%10.0fc)) ///
+// 		xlabel(1 "50-54" 2 "55-59" 3 "60-64" 4 "65-69" 5 "70-74" 6 "75+") ///
+//        legend(order(1 "p(25): Unhealthy" 2 "p(50): Unhealthy" 3 "p(75): Unhealthy") position(11) ring(0)) ///
+//         ytitle("Wealth") xtitle("Age") ///
+// 		title("Wealth profile among unhealthy (poor+fair) people (no college, men)")
+
+		
+// twoway (scatter pctile25 ageint5_1 if health == 1 & college == 0 & sex==1 & original==1, mcolor(red) msymbol(X) msize(vlarge)) ///
+// 		(scatter pctile50 ageint5_1 if health == 1 & college == 0 & sex==1 & original==1, mcolor(blue) msymbol(Oh) msize(vlarge)) ///
+// 		(scatter pctile75 ageint5_1 if health == 1 & college == 0 & sex==1 & original==1, mcolor(green) msymbol(O) msize(vlarge)), ///
+// 		ylabel(0(100000)800000, format(%10.0fc)) ///
+// 		xlabel(1 "50-54" 2 "55-59" 3 "60-64" 4 "65-69" 5 "70-74" 6 "75+") ///
+//        legend(order(1 "p(25): Healthy" 2 "p(50): Healthy" 3 "p(75): Healthy") position(11) ring(0)) ///
+//         ytitle("Wealth") xtitle("Age") ///
+// 		title("Wealth profile among healthy people (no college, men)")
+
+// twoway (scatter pctile25 ageint5_1 if health == 0 & college == 1 & sex==1 & original==0, mcolor(red) msymbol(X) msize(vlarge)) ///
+// 		(scatter pctile50 ageint5_1 if health == 0 & college == 1 & sex==1 & original==0, mcolor(blue) msymbol(Oh) msize(vlarge)) ///
+// 		(scatter pctile75 ageint5_1 if health == 0 & college == 1 & sex==1 & original==0, mcolor(green) msymbol(O) msize(vlarge)), ///
+// 		ylabel(0(100000)1500000, format(%10.0fc)) ///
+// 		xlabel(1 "50-54" 2 "55-59" 3 "60-64" 4 "65-69" 5 "70-74" 6 "75+") ///
+//        legend(order(1 "p(25): Unhealthy" 2 "p(50): Unhealthy" 3 "p(75): Unhealthy") position(11) ring(0)) ///
+//         ytitle("Wealth") xtitle("Age") ///
+// 		title("Wealth profile among unhealthy (poor+fair) people (college, men)")
+//		
+// twoway (scatter pctile25 ageint5_1 if health == 1 & college == 1 & sex==1 & original==0, mcolor(red) msymbol(X) msize(vlarge)) ///
+// 		(scatter pctile50 ageint5_1 if health == 1 & college == 1 & sex==1 & original==0, mcolor(blue) msymbol(Oh) msize(vlarge)) ///
+// 		(scatter pctile75 ageint5_1 if health == 1 & college == 1 & sex==1 & original==0, mcolor(green) msymbol(O) msize(vlarge)), ///
+// 		ylabel(0(100000)1500000, format(%10.0fc)) ///
+// 		xlabel(1 "50-54" 2 "55-59" 3 "60-64" 4 "65-69" 5 "70-74" 6 "75+") ///
+//        legend(order(1 "p(25): Healthy" 2 "p(50): Healthy" 3 "p(75): Healthy") position(11) ring(0)) ///
+//         ytitle("Wealth") xtitle("Age") ///
+// 		title("Wealth profile among healthy people (college, men)")	
+
+
+// twoway (scatter pctile25 ageint5_1 if health == 0 & college == 0 & sex==0 & original==0, mcolor(red) msymbol(X) msize(vlarge)) ///
+// 		(scatter pctile50 ageint5_1 if health == 0 & college == 0 & sex==0 & original==0, mcolor(blue) msymbol(Oh) msize(vlarge)) ///
+// 		(scatter pctile75 ageint5_1 if health == 0 & college == 0 & sex==0 & original==0, mcolor(green) msymbol(O) msize(vlarge)), ///
+// 		ylabel(0(100000)700000, format(%10.0fc)) ///
+// 		xlabel(1 "50-54" 2 "55-59" 3 "60-64" 4 "65-69" 5 "70-74" 6 "75+") ///
+//        legend(order(1 "p(25): Unhealthy" 2 "p(50): Unhealthy" 3 "p(75): Unhealthy") position(11) ring(0)) ///
+//         ytitle("Wealth") xtitle("Age") ///
+// 		title("Wealth profile among unhealthy (poor+fair) people (no college, women)")
+//		
+// twoway (scatter pctile25 ageint5_1 if health == 1 & college == 0 & sex==0 & original==0, mcolor(red) msymbol(X) msize(vlarge)) ///
+// 		(scatter pctile50 ageint5_1 if health == 1 & college == 0 & sex==0 & original==0, mcolor(blue) msymbol(Oh) msize(vlarge)) ///
+// 		(scatter pctile75 ageint5_1 if health == 1 & college == 0 & sex==0 & original==0, mcolor(green) msymbol(O) msize(vlarge)), ///
+// 		ylabel(0(100000)700000, format(%10.0fc)) ///
+// 		xlabel(1 "50-54" 2 "55-59" 3 "60-64" 4 "65-69" 5 "70-74" 6 "75+") ///
+//        legend(order(1 "p(25): Healthy" 2 "p(50): Healthy" 3 "p(75): Healthy") position(11) ring(0)) ///
+//         ytitle("Wealth") xtitle("Age") ///
+// 		title("Wealth profile among healthy people (no college, women)")
+//
+// twoway (scatter pctile25 ageint5_1 if health == 1 & college == 0 & sex==0 & original==0, mcolor(red) msymbol(X) msize(vlarge)) ///
+// 		(scatter pctile50 ageint5_1 if health == 0 & college == 0 & sex==0 & original==0, mcolor(blue) msymbol(Oh) msize(vlarge)), ///
+// 		ylabel(0(100000)700000, format(%10.0fc)) ///
+// 		xlabel(1 "50-54" 2 "55-59" 3 "60-64" 4 "65-69" 5 "70-74" 6 "75+") ///
+//        legend(order(1 "p(25): Healthy" 2 "p(50): Unealthy") position(11) ring(0)) ///
+//         ytitle("Wealth") xtitle("Age") ///
+// 		title("Wealth profile among healthy people (no college, women)")
+
+twoway (scatter pctile25 ageint5_1 if health == 0 & college == 1 & sex==0 & original==0, mcolor(red) msymbol(X) msize(vlarge)) ///
+		(scatter pctile50 ageint5_1 if health == 0 & college == 1 & sex==0 & original==0, mcolor(blue) msymbol(Oh) msize(vlarge)) ///
+		(scatter pctile75 ageint5_1 if health == 0 & college == 1 & sex==0 & original==0, mcolor(green) msymbol(O) msize(vlarge)), ///
+		ylabel(0(100000)1400000, format(%10.0fc)) ///
+		xlabel(1 "50-54" 2 "55-59" 3 "60-64" 4 "65-69" 5 "70-74" 6 "75+") ///
+       legend(order(1 "p(25): Unhealthy" 2 "p(50): Unhealthy" 3 "p(75): Unhealthy") position(11) ring(0)) ///
+        ytitle("Wealth") xtitle("Age") ///
+		title("Wealth profile among unhealthy (poor+fair) people (college, women)")
+
+twoway (scatter pctile25 ageint5_1 if health == 1 & college == 1 & sex==0 & original==0, mcolor(red) msymbol(X) msize(vlarge)) ///
+		(scatter pctile50 ageint5_1 if health == 1 & college == 1 & sex==0 & original==0, mcolor(blue) msymbol(Oh) msize(vlarge)) ///
+		(scatter pctile75 ageint5_1 if health == 1 & college == 1 & sex==0 & original==0, mcolor(green) msymbol(O) msize(vlarge)), ///
+		ylabel(0(100000)1400000, format(%10.0fc)) ///
+		xlabel(1 "50-54" 2 "55-59" 3 "60-64" 4 "65-69" 5 "70-74" 6 "75+") ///
+       legend(order(1 "p(25): Unhealthy" 2 "p(50): Unhealthy" 3 "p(75): Unhealthy") position(11) ring(0)) ///
+        ytitle("Wealth") xtitle("Age") ///
+		title("Wealth profile among healthy people (college, women)")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+	
 
 
 
